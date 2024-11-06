@@ -3,41 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SafeConnect - Emergency Alert System</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/css/bootstrap.min.css" rel="stylesheet">
-
+    <title>SafeConnect - Emergency Help</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@0.21.1/dist/axios.min.js"></script>
     <style>
-        body { background-color: #f4f4f9; }
+        body { font-family: Arial, sans-serif; }
         .container { text-align: center; margin-top: 50px; }
-        .emergency-btn { background-color: rgb(0, 42, 255); color: white; padding: 15px 30px; margin-top: 20px; border-radius: 5px; cursor: pointer; font-size: 20px; }
-        .notification { margin-top: 20px; padding: 10px; background-color: #28a745; color: white; display: none; }
+        .emergency-btn { background-color: #ff5733; color: white; padding: 15px 30px; margin-top: 20px; cursor: pointer; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>SafeConnect Emergency Alert System</h2>
-    <button class="emergency-btn" onclick="sendEmergency()">Emergency Alert</button>
-    <div id="alert-notification" class="notification">
-        <p>Emergency Alert Sent! Your location has been shared.</p>
+    <h1>SafeConnect - Emergency Help System</h1>
+    <button class="emergency-btn" onclick="sendEmergencyAlert()">Send Emergency Alert</button>
+    <div id="notification" style="display:none; margin-top: 20px; color: green;">
+        Help is on the way! Nearby places are being checked.
     </div>
 </div>
 
-
-<!-- Alert sound -->
-<audio id="alert-sound" src="alert.mp3" preload="auto"></audio>
-
-<!-- Firebase App (the core Firebase SDK) -->
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
-
-
 <script>
-    // Unique user identifier
-    const userId = Math.random().toString(36).substr(2, 9);
-
-    // Firebase configuration
-    const firebaseConfig = {
+  // Firebase Configuration
+  const firebaseConfig = {
         apiKey: "AIzaSyBSuVJbIrXYnJlHqQlkp015XDUCWuY0Jdk",
         authDomain: "safeconnect-emergency-sy-4f66d.firebaseapp.com",
         databaseURL: "https://safeconnect-emergency-sy-4f66d-default-rtdb.firebaseio.com",
@@ -47,42 +35,65 @@
         appId: "1:526443664201:web:a8df0bd9d17cd9dcde4098"
     };
 
-    // Initialize Firebase
-    const app = firebase.initializeApp(firebaseConfig);
-    const database = firebase.database();
 
-    // Send emergency alert
-    function sendEmergency() {
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const database = firebase.database();
+
+// Get user's current location
+function getUserLocation() {
+    return new Promise((resolve, reject) => {
         if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition((position) => {
-                const userLocation = {
-                    latitude: position.coords.latitude,
-                    longitude: position.coords.longitude,
-                    timestamp: Date.now(),
-                    triggeredBy: userId
-                };
-
-                database.ref('alerts').set(userLocation)
-                    .then(() => {
-                        document.getElementById('alert-notification').style.display = 'block';
-                    })
-                    .catch(error => console.error("Error writing to database:", error));
-            }, (error) => {
-                alert("Error fetching location: " + error.message);
-            });
+            navigator.geolocation.getCurrentPosition(resolve, reject);
         } else {
-            alert("Geolocation is not supported by this browser.");
-        }
-    }
-
-    // Listen for alerts and display notifications with location info
-    database.ref('alerts').on('value', (snapshot) => {
-        const data = snapshot.val();
-        if (data && data.triggeredBy !== userId) {
-            alert("Emergency Alert! Location: " + data.latitude + ", " + data.longitude);
+            reject("Geolocation is not supported by this browser.");
         }
     });
+}
+
+// Reverse geocoding and find nearby places using OpenCage API
+async function getNearbyPlaces(latitude, longitude) {
+    const apiKey = "003636e46b1845f0b3005eb069b42171";  // OpenCage API key
+    const url = `https://api.opencagedata.com/geocode/v1/json?q=${latitude}+${longitude}&key=${apiKey}`;
+    try {
+        const response = await axios.get(url);
+        const data = response.data;
+        const nearbyPlaces = data.results[0].components.city || "Nearby Place not found";
+        return nearbyPlaces;
+    } catch (error) {
+        console.error("Error fetching places:", error);
+        return "Error fetching places";
+    }
+}
+
+// Send Emergency Alert
+async function sendEmergencyAlert() {
+    try {
+        const position = await getUserLocation();
+        const { latitude, longitude } = position.coords;
+
+        // Get nearby places from OpenCage
+        const nearbyPlaces = await getNearbyPlaces(latitude, longitude);
+
+        // Save location and nearby places to Firebase
+        const alertData = {
+            latitude: latitude,
+            longitude: longitude,
+            nearbyPlace: nearbyPlaces,
+            timestamp: Date.now()
+        };
+        
+        const alertRef = database.ref('alerts/').push();
+        await alertRef.set(alertData);
+
+        // Display notification
+        document.getElementById('notification').style.display = 'block';
+        alert('Emergency Alert Sent! Nearby places: ' + nearbyPlaces);
+    } catch (error) {
+        alert("Error sending emergency alert: " + error);
+    }
+}
 </script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/js/bootstrap.bundle.min.js"></script>
+
 </body>
 </html>
