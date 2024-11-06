@@ -11,6 +11,8 @@
         body { font-family: Arial, sans-serif; }
         .container { text-align: center; margin-top: 50px; }
         .emergency-btn { background-color: #ff5733; color: white; padding: 15px 30px; margin-top: 20px; cursor: pointer; }
+        #notification { display: none; margin-top: 20px; color: green; font-weight: bold; }
+        #alertSound { display: none; }
     </style>
 </head>
 <body>
@@ -18,9 +20,8 @@
 <div class="container">
     <h1>SafeConnect - Emergency Help System</h1>
     <button class="emergency-btn" onclick="sendEmergencyAlert()">Send Emergency Alert</button>
-    <div id="notification" style="display:none; margin-top: 20px; color: green;">
-        Help is on the way! Nearby places are being checked.
-    </div>
+    <div id="notification">Help is on the way! Nearby places are being checked.</div>
+    <audio id="alertSound" src="alert.mp3" preload="auto"></audio>
 </div>
 
 <script>
@@ -35,64 +36,68 @@
         appId: "1:526443664201:web:a8df0bd9d17cd9dcde4098"
     };
 
+  // Initialize Firebase
+  firebase.initializeApp(firebaseConfig);
+  const database = firebase.database();
 
-// Initialize Firebase
-firebase.initializeApp(firebaseConfig);
-const database = firebase.database();
+  // Get user's current location
+  function getUserLocation() {
+      return new Promise((resolve, reject) => {
+          if (navigator.geolocation) {
+              navigator.geolocation.getCurrentPosition(resolve, reject);
+          } else {
+              reject("Geolocation is not supported by this browser.");
+          }
+      });
+  }
 
-// Get user's current location
-function getUserLocation() {
-    return new Promise((resolve, reject) => {
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(resolve, reject);
-        } else {
-            reject("Geolocation is not supported by this browser.");
-        }
-    });
-}
+  // Reverse geocoding and find nearby places within a 500m radius using OpenCage API
+  async function getNearbyPlaces(latitude, longitude) {
+      const apiKey = "003636e46b1845f0b3005eb069b42171";  // OpenCage API key
+      const url = `https://api.opencagedata.com/geocode/v1/json?q=${latitude}+${longitude}&key=${apiKey}`;
+      try {
+          const response = await axios.get(url);
+          const data = response.data;
+          // In a real scenario, you would filter based on proximity, but OpenCage does not directly provide distance within a radius.
+          const nearbyPlaces = data.results.length ? data.results[0].components.city || "Nearby Place not found" : "No places found nearby";
+          return nearbyPlaces;
+      } catch (error) {
+          console.error("Error fetching places:", error);
+          return "Error fetching places";
+      }
+  }
 
-// Reverse geocoding and find nearby places using OpenCage API
-async function getNearbyPlaces(latitude, longitude) {
-    const apiKey = "003636e46b1845f0b3005eb069b42171";  // OpenCage API key
-    const url = `https://api.opencagedata.com/geocode/v1/json?q=${latitude}+${longitude}&key=${apiKey}`;
-    try {
-        const response = await axios.get(url);
-        const data = response.data;
-        const nearbyPlaces = data.results[0].components.city || "Nearby Place not found";
-        return nearbyPlaces;
-    } catch (error) {
-        console.error("Error fetching places:", error);
-        return "Error fetching places";
-    }
-}
+  // Send Emergency Alert
+  async function sendEmergencyAlert() {
+      try {
+          const position = await getUserLocation();
+          const { latitude, longitude } = position.coords;
 
-// Send Emergency Alert
-async function sendEmergencyAlert() {
-    try {
-        const position = await getUserLocation();
-        const { latitude, longitude } = position.coords;
+          // Get nearby places from OpenCage
+          const nearbyPlaces = await getNearbyPlaces(latitude, longitude);
 
-        // Get nearby places from OpenCage
-        const nearbyPlaces = await getNearbyPlaces(latitude, longitude);
+          // Save location and nearby places to Firebase
+          const alertData = {
+              latitude: latitude,
+              longitude: longitude,
+              nearbyPlace: nearbyPlaces,
+              timestamp: Date.now()
+          };
+          
+          const alertRef = database.ref('alerts/').push();
+          await alertRef.set(alertData);
 
-        // Save location and nearby places to Firebase
-        const alertData = {
-            latitude: latitude,
-            longitude: longitude,
-            nearbyPlace: nearbyPlaces,
-            timestamp: Date.now()
-        };
-        
-        const alertRef = database.ref('alerts/').push();
-        await alertRef.set(alertData);
+          // Show notification and play sound
+          document.getElementById('notification').style.display = 'block';
+          const alertSound = document.getElementById('alertSound');
+          alertSound.play();
 
-        // Display notification
-        document.getElementById('notification').style.display = 'block';
-        alert('Emergency Alert Sent! Nearby places: ' + nearbyPlaces);
-    } catch (error) {
-        alert("Error sending emergency alert: " + error);
-    }
-}
+          // Display browser alert for user
+          alert('Emergency Alert Sent! Nearby places: ' + nearbyPlaces);
+      } catch (error) {
+          alert("Error sending emergency alert: " + error);
+      }
+  }
 </script>
 
 </body>
