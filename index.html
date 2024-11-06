@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeConnect - Emergency Alert System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Firebase CDN -->
+    <script src="https://www.gstatic.com/firebasejs/9.1.2/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.2/firebase-database.js"></script>
+    
+    <style>
+        body { background-color: #f4f4f9; }
+        .container { text-align: center; margin-top: 50px; }
+        .emergency-btn { background-color: red; color: white; padding: 15px 30px; margin-top: 20px; border-radius: 5px; cursor: pointer; font-size: 20px; }
+        .notification { margin-top: 20px; padding: 10px; background-color: #28a745; color: white; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>SafeConnect Emergency Alert System</h2>
+    <button class="emergency-btn" onclick="sendEmergency()">Emergency Alert</button>
+    <div id="alert-notification" class="notification">
+        <p>Emergency Alert Sent! Your location has been shared.</p>
+    </div>
+</div>
+
+<!-- Alert sound -->
+<audio id="alert-sound" src="alert.mp3" preload="auto"></audio>
+
+<script>
+    // Firebase configuration
+    const firebaseConfig = {
+        apiKey: "AIzaSyBSuVJbIrXYnJlHqQlkp015XDUCWuY0Jdk",
+        authDomain: "safeconnect-emergency-sy-4f66d.firebaseapp.com",
+        databaseURL: "https://safeconnect-emergency-sy-4f66d-default-rtdb.firebaseio.com",
+        projectId: "safeconnect-emergency-sy-4f66d",
+        storageBucket: "safeconnect-emergency-sy-4f66d.appspot.com",
+        messagingSenderId: "526443664201",
+        appId: "1:526443664201:web:a8df0bd9d17cd9dcde4098"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+    const userId = Math.random().toString(36).substr(2, 9);
+    let alertActive = false;
+
+    function sendEmergency() {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition((position) => {
+                const userLocation = {
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                    timestamp: Date.now(),
+                    triggeredBy: userId
+                };
+
+                // Send location to Firebase
+                database.ref('alerts').set(userLocation);
+
+                // Display notification and activate alert
+                document.getElementById('alert-notification').style.display = 'block';
+                alertActive = true;
+                startSoundAlert();
+                stopAlertAfter(10);  // Stop the alert after 10 minutes
+            }, (error) => {
+                alert("Error fetching location: " + error.message);
+            });
+        } else {
+            alert("Geolocation is not supported by this browser.");
+        }
+    }
+
+    // Play alert sound for 2 minutes
+    function startSoundAlert() {
+        const alertSound = document.getElementById('alert-sound');
+        alertSound.loop = true;
+        alertSound.play();
+        setTimeout(() => {
+            alertSound.pause();
+            alertSound.currentTime = 0;
+        }, 2 * 60 * 1000); // Stop after 2 minutes
+    }
+
+    // Function to stop the alert after a set number of minutes
+    function stopAlertAfter(minutes) {
+        setTimeout(() => {
+            alertActive = false;
+            database.ref('alerts').set(null); // Clear alert from Firebase
+            document.getElementById('alert-notification').style.display = 'none';
+        }, minutes * 60 * 1000);
+    }
+
+    // Listen for alerts and display notifications with location info
+    database.ref('alerts').on('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data && data.triggeredBy !== userId) {
+            const { latitude, longitude, timestamp } = data;
+            alert("Emergency Alert! Location: " + latitude + ", " + longitude);
+            playAlertSound();
+            sendRepeatedNotification();
+        }
+    });
+
+    // Play sound alert for other users
+    function playAlertSound() {
+        const alertSound = document.getElementById('alert-sound');
+        alertSound.play();
+    }
+
+    // Repeat notification every minute for 10 minutes
+    function sendRepeatedNotification() {
+        let repeatCount = 0;
+        const interval = setInterval(() => {
+            if (alertActive && repeatCount < 10) {
+                alert("Reminder: Someone nearby needs help!");
+                repeatCount++;
+            } else {
+                clearInterval(interval);
+            }
+        }, 60 * 1000); // Repeat every minute
+    }
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
